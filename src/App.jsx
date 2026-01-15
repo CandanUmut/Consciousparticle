@@ -7,7 +7,7 @@ import MobileControls from "./ui/MobileControls.jsx";
 const SNAPSHOT_INTERVAL = 80;
 
 const EMPTY_SNAPSHOT = {
-  state: "Loading",
+  state: "BOOT",
   player: null,
   abilities: [],
   radar: null,

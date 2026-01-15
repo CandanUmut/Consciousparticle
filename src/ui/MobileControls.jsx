@@ -1,7 +1,7 @@
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 export default function MobileControls({ game, joystick, snapshot }) {
-  const isActive = snapshot.state === "Playing";
+  const isActive = snapshot.state === "PLAYING";
 
   const handlePress = (key, pressed) => {
     if (!game) return;

@@ -48,6 +48,16 @@ export const FORMS_LIST = Object.keys(FORMS);
 
 export class Player {
   constructor() {
+    this.position = new THREE.Vector3();
+    this.velocity = new THREE.Vector3();
+    this.mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 28, 28),
+      new THREE.MeshStandardMaterial({ color: 0x68d6ff, emissive: 0x1f4c77 })
+    );
+    this.reset();
+  }
+
+  reset() {
     this.form = "Photon Drifter";
     const base = FORMS[this.form];
     this.mass = 6;
@@ -66,25 +76,21 @@ export class Player {
     this.magnetRadius = 0;
     this.cooldownReduction = 0;
     this.orbitAssist = false;
-    this.position = new THREE.Vector3();
-    this.velocity = new THREE.Vector3();
-    this.mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(1, 28, 28),
-      new THREE.MeshStandardMaterial({ color: 0x68d6ff, emissive: 0x1f4c77 })
-    );
-    this.mesh.scale.setScalar(this.radius);
+    this.boosting = false;
+    this.integrity = 100;
+    this.maxIntegrity = 100;
+    this.invulnerableTime = 0;
+    this.deathReason = "";
     this.abilities = {
       primary: { name: base.ability, cooldown: 0, maxCooldown: 8, energyCost: 25 },
       secondary: { name: "Solar Siphon", cooldown: 0, maxCooldown: 12, energyCost: 35 },
     };
-    this.boosting = false;
-    this.integrity = 100;
-    this.maxIntegrity = 100;
     this.stats = {
       kills: 0,
       time: 0,
       maxMass: this.mass,
     };
+    this.mesh.scale.setScalar(this.radius);
   }
 
   applyUpgrade(upgrade) {
@@ -128,11 +134,14 @@ export class Player {
     }
   }
 
-  takeDamage(amount) {
+  takeDamage(amount, reason = "") {
     const remaining = amount - this.shield;
     this.shield = clamp(this.shield - amount, 0, this.maxShield);
     if (remaining > 0) {
       this.integrity = clamp(this.integrity - remaining, 0, this.maxIntegrity);
+    }
+    if (amount > 0 && reason) {
+      this.deathReason = reason;
     }
   }
 
