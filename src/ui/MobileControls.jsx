@@ -41,7 +41,7 @@ export default function MobileControls({ game, joystick, snapshot }) {
           </>
         ) : null}
       </div>
-      <div className="action-buttons">
+      <div className="action-buttons uiInteractive">
         <button
           className="action-button"
           data-ui-button="true"

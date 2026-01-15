@@ -3,11 +3,12 @@ const LEFT_ZONE_RATIO = 0.45;
 const DEAD_ZONE = 8;
 
 export class InputManager {
-  constructor({ element, onMove, onAim, onJoystick }) {
+  constructor({ element, onMove, onAim, onJoystick, isEnabled = () => true }) {
     this.element = element;
     this.onMove = onMove;
     this.onAim = onAim;
     this.onJoystick = onJoystick;
+    this.isEnabled = isEnabled;
     this.joystickRadius = JOYSTICK_RADIUS;
 
     this.movementPointerId = null;
@@ -32,6 +33,7 @@ export class InputManager {
   }
 
   handlePointerDown(event) {
+    if (!this.isEnabled()) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     if (event.target.closest("[data-ui-button='true']")) return;
 
@@ -55,6 +57,7 @@ export class InputManager {
   }
 
   handlePointerMove(event) {
+    if (!this.isEnabled()) return;
     if (event.pointerType === "mouse") {
       this.updateAim(event.clientX, event.clientY);
     }

@@ -6,6 +6,29 @@ export default function Menus({ game, snapshot }) {
   const pending = snapshot.pendingUpgrades;
   const gameOver = snapshot.gameOver;
 
+  const handlePointerActivate = (handler) => (event) => {
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    event.currentTarget.dataset.pointerActivated = "true";
+    handler(event);
+  };
+
+  const handleClick = (handler) => (event) => {
+    if (event.currentTarget.dataset.pointerActivated === "true") {
+      delete event.currentTarget.dataset.pointerActivated;
+      return;
+    }
+    handler(event);
+  };
+
+  const handleStart = () => {
+    if (!game || game.state === "Playing") return;
+    if (import.meta.env.DEV) {
+      console.log("Start clicked");
+    }
+    game.ensureAudio();
+    game.startGame();
+  };
+
   const updateSetting = (key, value) => {
     if (!game) return;
     game.updateSetting(key, value);
@@ -13,21 +36,32 @@ export default function Menus({ game, snapshot }) {
 
   return (
     <>
-      <div className={`overlay ${state === "MainMenu" ? "active" : ""}`} data-ui-button="true">
+      <div className={`overlay uiInteractive ${state === "MainMenu" ? "active" : ""}`} data-ui-button="true">
         <div className="menu ui-panel">
           <h2>Conscious Particle</h2>
           <p>Drift, absorb, and evolve across cosmic gravity fields.</p>
-          <button data-ui-button="true" onClick={() => game?.startGame()}>Start Journey</button>
           <button
             data-ui-button="true"
-            onClick={() => window.alert("Controls: WASD / arrows to thrust, Space to boost, Shift to brake, E/Q abilities, Esc pause.")}
+            onClick={handleClick(handleStart)}
+            onPointerUp={handlePointerActivate(handleStart)}
+          >
+            Start Journey
+          </button>
+          <button
+            data-ui-button="true"
+            onClick={handleClick(() =>
+              window.alert("Controls: WASD / arrows to thrust, Space to boost, Shift to brake, E/Q abilities, Esc pause.")
+            )}
+            onPointerUp={handlePointerActivate(() =>
+              window.alert("Controls: WASD / arrows to thrust, Space to boost, Shift to brake, E/Q abilities, Esc pause.")
+            )}
           >
             Controls
           </button>
         </div>
       </div>
 
-      <div className={`overlay ${state === "Paused" ? "active" : ""}`} data-ui-button="true">
+      <div className={`overlay uiInteractive ${state === "Paused" ? "active" : ""}`} data-ui-button="true">
         <div className="menu ui-panel">
           <h2>Paused</h2>
           <div className="settings">
@@ -94,12 +128,24 @@ export default function Menus({ game, snapshot }) {
               </select>
             </label>
           </div>
-          <button data-ui-button="true" onClick={() => game?.resume()}>Resume</button>
-          <button data-ui-button="true" onClick={() => game?.reset()}>Quit</button>
+          <button
+            data-ui-button="true"
+            onClick={handleClick(() => game?.resume())}
+            onPointerUp={handlePointerActivate(() => game?.resume())}
+          >
+            Resume
+          </button>
+          <button
+            data-ui-button="true"
+            onClick={handleClick(() => game?.reset())}
+            onPointerUp={handlePointerActivate(() => game?.reset())}
+          >
+            Quit
+          </button>
         </div>
       </div>
 
-      <div className={`overlay ${state === "GameOver" ? "active" : ""}`} data-ui-button="true">
+      <div className={`overlay uiInteractive ${state === "GameOver" ? "active" : ""}`} data-ui-button="true">
         <div className="menu ui-panel">
           <h2>Signal Lost</h2>
           {gameOver ? (
@@ -110,11 +156,17 @@ export default function Menus({ game, snapshot }) {
               <p>Kills: {gameOver.kills}</p>
             </div>
           ) : null}
-          <button data-ui-button="true" onClick={() => game?.reset()}>Restart</button>
+          <button
+            data-ui-button="true"
+            onClick={handleClick(() => game?.reset())}
+            onPointerUp={handlePointerActivate(() => game?.reset())}
+          >
+            Restart
+          </button>
         </div>
       </div>
 
-      <div className={`overlay ${state === "UpgradeSelection" ? "active" : ""}`} data-ui-button="true">
+      <div className={`overlay uiInteractive ${state === "UpgradeSelection" ? "active" : ""}`} data-ui-button="true">
         <div className="menu ui-panel">
           <h2>{pending?.type === "form" ? "Choose Your Form" : "Evolution Options"}</h2>
           <p>{pending?.type === "form" ? "Milestone reached. Pick a new cosmic class." : "Select one upgrade to continue your cosmic journey."}</p>
@@ -124,7 +176,8 @@ export default function Menus({ game, snapshot }) {
                 key={`${upgrade.name}-${upgrade.form ?? "base"}`}
                 data-ui-button="true"
                 className={`upgrade-card ${upgrade.rarity}`}
-                onClick={() => game?.applyUpgrade(upgrade)}
+                onClick={handleClick(() => game?.applyUpgrade(upgrade))}
+                onPointerUp={handlePointerActivate(() => game?.applyUpgrade(upgrade))}
               >
                 <span className="tag">{upgrade.isForm ? "Form" : upgrade.rarity}</span>
                 <strong>{upgrade.form ?? upgrade.name}</strong>

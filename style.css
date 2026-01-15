@@ -16,15 +16,19 @@
   padding: 0;
 }
 
+html,
 body,
-html {
+#root {
+  width: 100%;
   height: 100%;
-  background: #04050c;
-  color: #eaf0ff;
+  margin: 0;
+  overflow: hidden;
 }
 
-#root {
-  height: 100%;
+body,
+html {
+  background: #04050c;
+  color: #eaf0ff;
 }
 
 .app {
@@ -33,23 +37,32 @@ html {
   overflow: hidden;
 }
 
+.sceneLayer,
 .canvas-layer {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 0;
   touch-action: none;
 }
 
+canvas,
 .game-canvas {
   width: 100%;
   height: 100%;
   display: block;
 }
 
+.uiLayer,
 .ui-layer {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 10;
   pointer-events: none;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.uiInteractive {
+  pointer-events: auto;
 }
 
 .ui-panel {
@@ -147,7 +160,8 @@ html {
   align-items: center;
   justify-content: center;
   background: rgba(5, 8, 16, 0.6);
-  pointer-events: auto;
+  pointer-events: none;
+  z-index: 100;
   opacity: 0;
   transform: scale(0.98);
   transition: 0.2s ease;
@@ -156,6 +170,7 @@ html {
 .overlay.active {
   opacity: 1;
   transform: scale(1);
+  pointer-events: auto;
 }
 
 .menu {
@@ -175,7 +190,8 @@ html {
   background: #131a32;
   border: 1px solid rgba(104, 214, 255, 0.3);
   color: #eaf0ff;
-  padding: 10px 14px;
+  padding: 12px 16px;
+  min-height: 44px;
   border-radius: 10px;
   transition: 0.2s ease;
   pointer-events: auto;
