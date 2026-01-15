@@ -15,6 +15,7 @@ export default function ThreeCanvas({ onReady, onJoystickChange }) {
       onMove: (vector) => game.setMovementVector(vector),
       onAim: (pointer) => game.setPointer(pointer),
       onJoystick: onJoystickChange,
+      isEnabled: () => game.state === "Playing",
     });
 
     game.start();
@@ -28,7 +29,7 @@ export default function ThreeCanvas({ onReady, onJoystickChange }) {
   }, [onJoystickChange, onReady]);
 
   return (
-    <div className="canvas-layer" ref={wrapperRef}>
+    <div className="sceneLayer canvas-layer" ref={wrapperRef}>
       <canvas ref={canvasRef} className="game-canvas" />
     </div>
   );

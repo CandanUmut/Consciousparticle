@@ -43,7 +43,7 @@ export default function App() {
         onReady={setGame}
         onJoystickChange={setJoystick}
       />
-      <div className="ui-layer">
+      <div className="uiLayer ui-layer">
         <HUD snapshot={snapshot} />
         <Menus game={game} snapshot={snapshot} />
         <MobileControls game={game} joystick={joystick} snapshot={snapshot} />
