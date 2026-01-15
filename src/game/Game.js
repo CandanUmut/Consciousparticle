@@ -10,9 +10,8 @@ import { loadFromStorage, saveToStorage } from "../utils/Storage.js";
 import { ENTITY_TYPES } from "./Entities.js";
 
 export class Game {
-  constructor({ canvas, ui }) {
+  constructor({ canvas }) {
     this.canvas = canvas;
-    this.ui = ui;
     this.state = "MainMenu";
     this.clock = new THREE.Clock();
     this.scene = new THREE.Scene();
@@ -44,75 +43,28 @@ export class Game {
     this.createStarfield();
 
     this.inputs = { forward: false, backward: false, left: false, right: false, boost: false, brake: false, ability: false, secondary: false };
+    this.movement = new THREE.Vector2(0, 0);
     this.pointer = new THREE.Vector2();
     this.audio.setVolume(this.settings.volume);
     this.audio.setMuted(this.settings.muted);
 
     this.shake = 0;
     this.bindEvents();
-    this.setupMenus();
     this.lastBiome = "cool";
+    this.pendingUpgrades = null;
+    this.lastGameOver = null;
+    this.running = false;
+    this.frameId = null;
   }
 
   bindEvents() {
-    window.addEventListener("resize", () => this.onResize());
-    window.addEventListener("keydown", (event) => this.onKey(event, true));
-    window.addEventListener("keyup", (event) => this.onKey(event, false));
-    window.addEventListener("pointermove", (event) => {
-      this.pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-      this.pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
-    });
-    this.canvas.addEventListener("click", () => {
-      this.audio.ensureContext();
-      if (this.state === "MainMenu") {
-        this.startGame();
-      }
-    });
-    this.bindMobileControls();
-  }
+    this.handleResize = () => this.onResize();
+    this.handleKeyDown = (event) => this.onKey(event, true);
+    this.handleKeyUp = (event) => this.onKey(event, false);
 
-  bindMobileControls() {
-    const bindButton = (action, key) => {
-      const button = this.ui.mobileControls.querySelector(`[data-action='${action}']`);
-      if (!button) return;
-      button.addEventListener("pointerdown", (event) => {
-        event.preventDefault();
-        this.inputs[key] = true;
-      });
-      button.addEventListener("pointerup", (event) => {
-        event.preventDefault();
-        this.inputs[key] = false;
-      });
-      button.addEventListener("pointerleave", () => {
-        this.inputs[key] = false;
-      });
-    };
-    bindButton("left", "left");
-    bindButton("right", "right");
-    bindButton("up", "forward");
-    bindButton("down", "backward");
-    bindButton("boost", "boost");
-    bindButton("ability", "ability");
-    bindButton("secondary", "secondary");
-  }
-
-  setupMenus() {
-    this.ui.mainMenu.querySelector("[data-action='start']").addEventListener("click", () => this.startGame());
-    this.ui.mainMenu.querySelector("[data-action='how']").addEventListener("click", () => {
-      alert("Controls: WASD / arrows to thrust, Space to boost, Shift to brake, E/Q abilities, Esc pause.");
-    });
-    this.ui.pauseMenu.querySelector("[data-action='resume']").addEventListener("click", () => this.resume());
-    this.ui.pauseMenu.querySelector("[data-action='quit']").addEventListener("click", () => this.reset());
-    this.ui.gameOverMenu.querySelector("[data-action='restart']").addEventListener("click", () => this.reset());
-
-    this.ui.upgradeMenu.onSelect = (upgrade) => {
-      if (upgrade.isForm) {
-        this.player.setForm(upgrade.form);
-      } else {
-        this.player.applyUpgrade(upgrade);
-      }
-      this.state = "Playing";
-    };
+    window.addEventListener("resize", this.handleResize);
+    window.addEventListener("keydown", this.handleKeyDown);
+    window.addEventListener("keyup", this.handleKeyUp);
   }
 
   createLighting() {
@@ -139,7 +91,8 @@ export class Game {
 
   startGame() {
     this.state = "Playing";
-    this.ui.mainMenu.classList.remove("active");
+    this.pendingUpgrades = null;
+    this.lastGameOver = null;
     this.clock.start();
     this.audio.ensureContext();
     this.audio.load();
@@ -150,13 +103,11 @@ export class Game {
   pause() {
     this.state = "Paused";
     this.clock.stop();
-    this.ui.showPause(this.createSettingsControls());
   }
 
   resume() {
     this.state = "Playing";
     this.clock.start();
-    this.ui.hidePause();
   }
 
   reset() {
@@ -188,79 +139,14 @@ export class Game {
     if (key === "q") this.inputs.secondary = pressed;
   }
 
-  createSettingsControls() {
-    const toggles = [];
-    const addToggle = (label, key) => {
-      const wrapper = document.createElement("label");
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = this.settings[key];
-      input.addEventListener("change", () => {
-        this.settings[key] = input.checked;
-        saveToStorage("settings", this.settings);
-      });
-      wrapper.append(label, input);
-      toggles.push(wrapper);
-    };
-    addToggle("Orbit Assist", "orbitAssist");
-    addToggle("Screen Shake", "screenShake");
-    addToggle("Cinematic Orbit", "cinematic");
-
-    const volume = document.createElement("label");
-    volume.textContent = "Volume";
-    const slider = document.createElement("input");
-    slider.type = "range";
-    slider.min = "0";
-    slider.max = "1";
-    slider.step = "0.05";
-    slider.value = this.settings.volume;
-    slider.addEventListener("input", () => {
-      this.settings.volume = Number(slider.value);
-      this.audio.setVolume(this.settings.volume);
-      saveToStorage("settings", this.settings);
-    });
-    volume.append(slider);
-    toggles.push(volume);
-
-    const mute = document.createElement("label");
-    mute.textContent = "Mute";
-    const muteCheck = document.createElement("input");
-    muteCheck.type = "checkbox";
-    muteCheck.checked = this.settings.muted;
-    muteCheck.addEventListener("change", () => {
-      this.settings.muted = muteCheck.checked;
-      this.audio.setMuted(this.settings.muted);
-      saveToStorage("settings", this.settings);
-    });
-    mute.append(muteCheck);
-    toggles.push(mute);
-
-    const quality = document.createElement("label");
-    quality.textContent = "Graphics Quality";
-    const qualitySelect = document.createElement("select");
-    ["low", "med", "high"].forEach((level) => {
-      const option = document.createElement("option");
-      option.value = level;
-      option.textContent = level;
-      if (this.settings.quality === level) option.selected = true;
-      qualitySelect.append(option);
-    });
-    qualitySelect.addEventListener("change", () => {
-      this.settings.quality = qualitySelect.value;
-      saveToStorage("settings", this.settings);
-    });
-    quality.append(qualitySelect);
-    toggles.push(quality);
-
-    return toggles;
-  }
-
   updateControls(delta) {
     const thrust = new THREE.Vector3();
-    if (this.inputs.forward) thrust.y += 1;
-    if (this.inputs.backward) thrust.y -= 1;
-    if (this.inputs.left) thrust.x -= 1;
-    if (this.inputs.right) thrust.x += 1;
+    const inputVector = new THREE.Vector2(
+      this.movement.x + (this.inputs.right ? 1 : 0) - (this.inputs.left ? 1 : 0),
+      this.movement.y + (this.inputs.forward ? 1 : 0) - (this.inputs.backward ? 1 : 0)
+    );
+    if (inputVector.length() > 1) inputVector.normalize();
+    thrust.set(inputVector.x, inputVector.y, 0);
     if (thrust.length() > 0) {
       thrust.normalize();
       const energyCost = delta * 8;
@@ -409,9 +295,12 @@ export class Game {
             const upgrades = rollUpgrades(this.player.level);
             const formChoice = upgrades.find((upgrade) => upgrade.isForm);
             if (formChoice) {
-              this.ui.upgradeMenu.showFormChoice(formChoice);
+              this.pendingUpgrades = {
+                type: "form",
+                options: formChoice.forms.map((form) => ({ ...formChoice, form })),
+              };
             } else {
-              this.ui.upgradeMenu.show(upgrades);
+              this.pendingUpgrades = { type: "upgrade", options: upgrades };
             }
           }
         } else {
@@ -441,12 +330,51 @@ export class Game {
         kills: Math.max(this.stats.kills, this.player.stats.kills),
       };
       saveToStorage("best", this.stats);
-      this.ui.showGameOver({ ...this.player.stats, level: this.player.level });
+      this.lastGameOver = { ...this.player.stats, level: this.player.level };
       this.audio.play("death");
     }
   }
 
+  setMovementVector(vector) {
+    this.movement.set(vector.x, vector.y);
+  }
+
+  setPointer(pointer) {
+    this.pointer.set(pointer.x, pointer.y);
+  }
+
+  setInput(key, pressed) {
+    this.inputs[key] = pressed;
+  }
+
+  applyUpgrade(upgrade) {
+    if (!upgrade) return;
+    if (upgrade.isForm) {
+      this.player.setForm(upgrade.form);
+    } else {
+      this.player.applyUpgrade(upgrade);
+    }
+    this.pendingUpgrades = null;
+    this.state = "Playing";
+  }
+
+  updateSetting(key, value) {
+    this.settings[key] = value;
+    if (key === "volume") {
+      this.audio.setVolume(this.settings.volume);
+    }
+    if (key === "muted") {
+      this.audio.setMuted(this.settings.muted);
+    }
+    saveToStorage("settings", this.settings);
+  }
+
+  ensureAudio() {
+    this.audio.ensureContext();
+  }
+
   update() {
+    if (!this.running) return;
     const delta = Math.min(this.clock.getDelta(), 0.04);
     if (this.state === "Playing") {
       this.updateGameplay(delta);
@@ -454,8 +382,65 @@ export class Game {
     this.updateCamera(delta);
     this.effects.update(delta);
     this.updateBiome();
-    this.ui.updateHUD(this.player, this.state, this.world.entities);
     this.renderer.render(this.scene, this.camera);
-    requestAnimationFrame(() => this.update());
+    this.frameId = requestAnimationFrame(() => this.update());
   }
+
+  start() {
+    if (this.running) return;
+    this.running = true;
+    this.clock.start();
+    this.update();
+  }
+
+  stop() {
+    this.running = false;
+    if (this.frameId) {
+      cancelAnimationFrame(this.frameId);
+    }
+  }
+
+  dispose() {
+    this.stop();
+    window.removeEventListener("resize", this.handleResize);
+    window.removeEventListener("keydown", this.handleKeyDown);
+    window.removeEventListener("keyup", this.handleKeyUp);
+    this.renderer.dispose();
+  }
+
+  getSnapshot() {
+    return {
+      state: this.state,
+      player: {
+        mass: this.player.mass,
+        level: this.player.level,
+        form: this.player.form,
+        xp: this.player.xp,
+        nextLevel: this.player.nextLevel,
+        energy: this.player.energy,
+        maxEnergy: this.player.maxEnergy,
+        shield: this.player.shield,
+        maxShield: this.player.maxShield,
+        integrity: this.player.integrity,
+      },
+      abilities: Object.values(this.player.abilities).map((ability) => ({
+        name: ability.name,
+        cooldown: ability.cooldown,
+        maxCooldown: ability.maxCooldown,
+      })),
+      radar: {
+        player: { x: this.player.position.x, y: this.player.position.y },
+        entities: this.world.entities.map((entity) => ({
+          x: entity.position.x,
+          y: entity.position.y,
+          type: entity.type,
+        })),
+      },
+      settings: { ...this.settings },
+      stats: { ...this.stats },
+      pendingUpgrades: this.pendingUpgrades,
+      gameOver: this.lastGameOver,
+    };
+  }
+
 }

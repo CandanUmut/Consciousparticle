@@ -61,11 +61,23 @@ npm run dev
 
 ## 📦 Build & Deploy (GitHub Pages)
 
+1. Ensure `vite.config.js` has `base: "/Consciousparticle/"` (replace with your repo name if forked).
+2. Commit and push to `main`.
+3. GitHub Actions will build and deploy automatically to Pages.
+
+Manual build:
+
 ```bash
 npm run build
 ```
 
-Deploy the `dist/` folder to GitHub Pages. The Vite config uses a **relative base path** so it works under a GitHub Pages subpath.
+Preview locally:
+
+```bash
+npm run preview
+```
+
+The workflow publishes the `dist/` folder to GitHub Pages on each push to `main`.
 
 ## 📝 License
 
