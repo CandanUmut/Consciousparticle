@@ -3,24 +3,29 @@ import { clamp, vecLength } from "../utils/Math.js";
 export const GRAVITY_CONSTANT = 0.15;
 const SOFTENING = 6;
 const MAX_ACCEL = 2.5;
+const MAX_TOTAL_ACCEL = 4.5;
 
 export const applyGravity = (body, sources, delta, resistance = 0) => {
-  const ax = 0;
-  const ay = 0;
-  const az = 0;
-  let totalAx = ax;
-  let totalAy = ay;
-  let totalAz = az;
+  let totalAx = 0;
+  let totalAy = 0;
+  let totalAz = 0;
   for (const source of sources) {
     const dx = source.position.x - body.position.x;
     const dy = source.position.y - body.position.y;
     const dz = source.position.z - body.position.z;
-    const distSq = dx * dx + dy * dy + dz * dz + SOFTENING;
+    const distSq = dx * dx + dy * dy + dz * dz + SOFTENING * SOFTENING;
     const dist = Math.sqrt(distSq);
     const accel = clamp((GRAVITY_CONSTANT * source.mass) / distSq, 0, MAX_ACCEL);
     totalAx += (dx / dist) * accel;
     totalAy += (dy / dist) * accel;
     totalAz += (dz / dist) * accel;
+  }
+  const totalMag = vecLength(totalAx, totalAy, totalAz);
+  if (totalMag > MAX_TOTAL_ACCEL) {
+    const scale = MAX_TOTAL_ACCEL / totalMag;
+    totalAx *= scale;
+    totalAy *= scale;
+    totalAz *= scale;
   }
   const damp = 1 - clamp(resistance, 0, 0.7);
   body.velocity.x += totalAx * delta * damp;

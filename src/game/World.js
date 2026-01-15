@@ -21,6 +21,16 @@ export class World {
     this.spawnInitial();
   }
 
+  reset() {
+    for (const entity of this.entities) {
+      this.scene.remove(entity.mesh);
+    }
+    this.entities = [];
+    this.hunters = [];
+    this.gravitySources = [];
+    this.spawnInitial();
+  }
+
   spawnInitial() {
     Object.keys(LIMITS).forEach((type) => {
       const count = LIMITS[type];

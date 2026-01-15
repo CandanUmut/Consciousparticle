@@ -3,7 +3,8 @@ import Radar from "./Radar.jsx";
 export default function HUD({ snapshot }) {
   const player = snapshot.player;
   const abilities = snapshot.abilities || [];
-  const hidden = snapshot.state !== "Playing";
+  const hidden = snapshot.state !== "PLAYING";
+  const debug = snapshot.debug;
 
   if (!player) return null;
 
@@ -15,6 +16,13 @@ export default function HUD({ snapshot }) {
         <div className="stat"><span>Form</span><strong>{player.form}</strong></div>
         <div className="stat"><span>XP</span><strong>{player.xp.toFixed(0)} / {player.nextLevel}</strong></div>
         <div className="bar"><span style={{ width: `${(player.xp / player.nextLevel) * 100}%` }} /></div>
+        {debug ? (
+          <div className="debug-panel">
+            <div className="stat"><span>Eat Radius</span><strong>{debug.eatRadius.toFixed(1)}</strong></div>
+            <div className="stat"><span>Nearest Edible</span><strong>{debug.nearestEdible}</strong></div>
+            <div className="stat"><span>Blocked By</span><strong>{debug.blockReason}</strong></div>
+          </div>
+        ) : null}
       </div>
       <div className="hud-panel right ui-panel">
         <div className="stat"><span>Energy</span><strong>{player.energy.toFixed(0)}</strong></div>

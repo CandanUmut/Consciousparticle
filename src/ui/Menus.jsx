@@ -21,12 +21,12 @@ export default function Menus({ game, snapshot }) {
   };
 
   const handleStart = () => {
-    if (!game || game.state === "Playing") return;
+    if (!game || game.state === "PLAYING") return;
     if (import.meta.env.DEV) {
       console.log("Start clicked");
     }
     game.ensureAudio();
-    game.startGame();
+    game.startNewRun();
   };
 
   const updateSetting = (key, value) => {
@@ -36,7 +36,7 @@ export default function Menus({ game, snapshot }) {
 
   return (
     <>
-      <div className={`overlay uiInteractive ${state === "MainMenu" ? "active" : ""}`} data-ui-button="true">
+      <div className={`overlay uiInteractive ${state === "MENU" ? "active" : ""}`} data-ui-button="true">
         <div className="menu ui-panel">
           <h2>Conscious Particle</h2>
           <p>Drift, absorb, and evolve across cosmic gravity fields.</p>
@@ -61,7 +61,7 @@ export default function Menus({ game, snapshot }) {
         </div>
       </div>
 
-      <div className={`overlay uiInteractive ${state === "Paused" ? "active" : ""}`} data-ui-button="true">
+      <div className={`overlay uiInteractive ${state === "PAUSED" ? "active" : ""}`} data-ui-button="true">
         <div className="menu ui-panel">
           <h2>Paused</h2>
           <div className="settings">
@@ -145,7 +145,7 @@ export default function Menus({ game, snapshot }) {
         </div>
       </div>
 
-      <div className={`overlay uiInteractive ${state === "GameOver" ? "active" : ""}`} data-ui-button="true">
+      <div className={`overlay uiInteractive ${state === "GAME_OVER" ? "active" : ""}`} data-ui-button="true">
         <div className="menu ui-panel">
           <h2>Signal Lost</h2>
           {gameOver ? (
@@ -154,19 +154,27 @@ export default function Menus({ game, snapshot }) {
               <p>Max Mass: {gameOver.maxMass.toFixed(1)}</p>
               <p>Level: {gameOver.level}</p>
               <p>Kills: {gameOver.kills}</p>
+              <p>Cause: {gameOver.reason}</p>
             </div>
           ) : null}
+          <button
+            data-ui-button="true"
+            onClick={handleClick(() => game?.startNewRun())}
+            onPointerUp={handlePointerActivate(() => game?.startNewRun())}
+          >
+            Restart
+          </button>
           <button
             data-ui-button="true"
             onClick={handleClick(() => game?.reset())}
             onPointerUp={handlePointerActivate(() => game?.reset())}
           >
-            Restart
+            Main Menu
           </button>
         </div>
       </div>
 
-      <div className={`overlay uiInteractive ${state === "UpgradeSelection" ? "active" : ""}`} data-ui-button="true">
+      <div className={`overlay uiInteractive ${state === "EVOLVE_PICK" ? "active" : ""}`} data-ui-button="true">
         <div className="menu ui-panel">
           <h2>{pending?.type === "form" ? "Choose Your Form" : "Evolution Options"}</h2>
           <p>{pending?.type === "form" ? "Milestone reached. Pick a new cosmic class." : "Select one upgrade to continue your cosmic journey."}</p>

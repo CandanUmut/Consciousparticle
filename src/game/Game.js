@@ -9,10 +9,28 @@ import { clamp, normalizeVec, randRange } from "../utils/Math.js";
 import { loadFromStorage, saveToStorage } from "../utils/Storage.js";
 import { ENTITY_TYPES } from "./Entities.js";
 
+const GAME_STATES = {
+  BOOT: "BOOT",
+  MENU: "MENU",
+  PLAYING: "PLAYING",
+  PAUSED: "PAUSED",
+  EVOLVE_PICK: "EVOLVE_PICK",
+  GAME_OVER: "GAME_OVER",
+};
+
+const MAX_DT = 1 / 30;
+const FIXED_STEP = 1 / 60;
+const SAFE_SPAWN_ATTEMPTS = 18;
+const SAFE_SPAWN_PADDING = 24;
+const EAT_RATIO_THRESHOLD = 0.9;
+const PARTIAL_EAT_THRESHOLD = 0.7;
+const EAT_RADIUS_MULTIPLIER = 1.15;
+const MAX_EAT_SPEED = 6.5;
+
 export class Game {
   constructor({ canvas }) {
     this.canvas = canvas;
-    this.state = "MainMenu";
+    this.state = GAME_STATES.BOOT;
     this.clock = new THREE.Clock();
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(0x05070f, 90, 420);
@@ -53,8 +71,14 @@ export class Game {
     this.lastBiome = "cool";
     this.pendingUpgrades = null;
     this.lastGameOver = null;
+    this.debugInfo = {
+      eatRadius: 0,
+      nearestEdible: "None",
+      blockReason: "None",
+    };
     this.running = false;
     this.frameId = null;
+    this.accumulator = 0;
   }
 
   bindEvents() {
@@ -89,30 +113,41 @@ export class Game {
     this.scene.add(points);
   }
 
-  startGame() {
-    this.state = "Playing";
+  startNewRun() {
+    if (![GAME_STATES.MENU, GAME_STATES.GAME_OVER].includes(this.state)) return;
+    this.state = GAME_STATES.PLAYING;
     this.pendingUpgrades = null;
     this.lastGameOver = null;
     this.clock.start();
     this.audio.ensureContext();
     this.audio.load();
-    this.player.position.set(0, 0, 0);
+    this.world.reset();
+    this.player.reset();
+    const spawn = this.findSafeSpawn();
+    this.player.position.copy(spawn);
     this.player.velocity.set(0, 0, 0);
+    this.player.invulnerableTime = 2.5;
   }
 
   pause() {
-    this.state = "Paused";
+    if (this.state !== GAME_STATES.PLAYING) return;
+    this.state = GAME_STATES.PAUSED;
     this.clock.stop();
+    this.clearInputs();
   }
 
   resume() {
-    this.state = "Playing";
+    if (this.state !== GAME_STATES.PAUSED) return;
+    this.state = GAME_STATES.PLAYING;
     this.clock.start();
   }
 
   reset() {
     saveToStorage("best", this.stats);
-    window.location.reload();
+    this.pendingUpgrades = null;
+    this.lastGameOver = null;
+    this.state = GAME_STATES.MENU;
+    this.clearInputs();
   }
 
   onResize() {
@@ -124,11 +159,11 @@ export class Game {
   onKey(event, pressed) {
     const key = event.key.toLowerCase();
     if (key === "escape" && pressed) {
-      if (this.state === "Playing") this.pause();
-      else if (this.state === "Paused") this.resume();
+      if (this.state === GAME_STATES.PLAYING) this.pause();
+      else if (this.state === GAME_STATES.PAUSED) this.resume();
       return;
     }
-    if (this.state !== "Playing") return;
+    if (this.state !== GAME_STATES.PLAYING) return;
     if (["w", "arrowup"].includes(key)) this.inputs.forward = pressed;
     if (["s", "arrowdown"].includes(key)) this.inputs.backward = pressed;
     if (["a", "arrowleft"].includes(key)) this.inputs.left = pressed;
@@ -171,6 +206,30 @@ export class Game {
 
     if (this.inputs.ability) this.activateAbility("primary");
     if (this.inputs.secondary) this.activateAbility("secondary");
+  }
+
+  clearInputs() {
+    this.inputs = { forward: false, backward: false, left: false, right: false, boost: false, brake: false, ability: false, secondary: false };
+    this.movement.set(0, 0);
+  }
+
+  findSafeSpawn() {
+    const bounds = this.world.bounds * 0.6;
+    for (let i = 0; i < SAFE_SPAWN_ATTEMPTS; i += 1) {
+      const candidate = new THREE.Vector3(
+        randRange(-bounds, bounds),
+        randRange(-bounds * 0.2, bounds * 0.2),
+        randRange(-bounds, bounds)
+      );
+      const tooCloseToGravity = this.world.gravitySources.some(
+        (source) => source.position.distanceTo(candidate) < source.radius * 6 + SAFE_SPAWN_PADDING
+      );
+      const tooCloseToHunters = this.world.hunters.some((hunter) => hunter.position.distanceTo(candidate) < 30);
+      if (!tooCloseToGravity && !tooCloseToHunters) {
+        return candidate;
+      }
+    }
+    return new THREE.Vector3(0, 0, 0);
   }
 
   activateAbility(slot) {
@@ -255,7 +314,7 @@ export class Game {
       this.player.energy = clamp(this.player.energy + harvest, 0, this.player.maxEnergy);
       this.player.xp += delta * 4;
       if (nearStar.position.distanceTo(this.player.position) < nearStar.radius * 2.4) {
-        this.player.takeDamage(delta * 8);
+        this.player.takeDamage(delta * 8, "Star corona burn");
         this.shake = 0.2;
       }
       this.player.siphon -= delta;
@@ -276,6 +335,12 @@ export class Game {
     }
 
     const toRemove = [];
+    let nearestDistance = Infinity;
+    let nearestLabel = "None";
+    let nearestBlockReason = "None";
+    let nearestEdibleDistance = Infinity;
+    let nearestEdibleLabel = "None";
+    this.debugInfo.eatRadius = this.player.radius * EAT_RADIUS_MULTIPLIER;
     for (const entity of this.world.entities) {
       const distance = entity.position.distanceTo(this.player.position);
       const dronesBonus = this.player.drones ? 6 : 0;
@@ -283,15 +348,35 @@ export class Game {
       if (entity.type === ENTITY_TYPES.MOTE && distance < magnetRange) {
         entity.position.lerp(this.player.position, delta * 6);
       }
-      if (distance < entity.radius + this.player.radius && !this.player.phase) {
-        if (entity.mass < this.player.mass * 0.85) {
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestLabel = entity.type;
+      }
+      const relativeSpeed = collisionDamage(this.player, entity);
+      const inRange = distance < this.player.radius * EAT_RADIUS_MULTIPLIER + entity.radius;
+      const massRatio = this.player.mass / Math.max(entity.mass, 0.01);
+      const canConsume = this.player.mass >= entity.mass * EAT_RATIO_THRESHOLD;
+      const safeImpact = relativeSpeed <= MAX_EAT_SPEED;
+      if (canConsume && distance < nearestEdibleDistance) {
+        nearestEdibleDistance = distance;
+        nearestEdibleLabel = entity.type;
+      }
+      if (nearestDistance === distance) {
+        if (!inRange) nearestBlockReason = "Out of range";
+        else if (!canConsume) nearestBlockReason = "Too massive";
+        else if (!safeImpact) nearestBlockReason = "Impact too fast";
+        else nearestBlockReason = "Edible";
+      }
+
+      if (inRange && !this.player.phase) {
+        if (canConsume && safeImpact) {
           this.player.absorb(entity);
           const leveled = this.player.gainXp(entity.mass * 1.4);
           toRemove.push(entity);
           this.effects.spawnImpact(entity.position, 0x68d6ff, 16);
           this.audio.play("pickup");
           if (leveled) {
-            this.state = "UpgradeSelection";
+            this.state = GAME_STATES.EVOLVE_PICK;
             const upgrades = rollUpgrades(this.player.level);
             const formChoice = upgrades.find((upgrade) => upgrade.isForm);
             if (formChoice) {
@@ -303,12 +388,24 @@ export class Game {
               this.pendingUpgrades = { type: "upgrade", options: upgrades };
             }
           }
+        } else if (!canConsume && massRatio >= PARTIAL_EAT_THRESHOLD && safeImpact) {
+          const biteMass = Math.min(entity.mass * 0.12, this.player.mass * 0.25);
+          entity.mass = Math.max(entity.mass - biteMass, 0.2);
+          const newRadius = Math.cbrt(entity.mass / Math.max(entity.density, 0.1));
+          entity.radius = Math.max(newRadius, 0.6);
+          entity.mesh.scale.setScalar(entity.radius);
+          this.player.absorb({ mass: biteMass });
+          this.effects.spawnImpact(entity.position, 0x68d6ff, 8);
+          this.audio.play("pickup");
         } else {
-          const damage = collisionDamage(this.player, entity);
-          this.player.takeDamage(damage);
-          this.effects.spawnImpact(this.player.position, 0xff6b6b, 10);
-          this.audio.play("hit");
-          this.shake = 0.4;
+          if (this.player.invulnerableTime <= 0) {
+            const damage = collisionDamage(this.player, entity);
+            const reason = !safeImpact ? "Impact too fast" : `Collision with ${entity.type}`;
+            this.player.takeDamage(damage, reason);
+            this.effects.spawnImpact(this.player.position, 0xff6b6b, 10);
+            this.audio.play("hit");
+            this.shake = 0.4;
+          }
         }
       }
     }
@@ -318,11 +415,14 @@ export class Game {
     if (this.player.phase) {
       this.player.phase -= delta;
     }
+    if (this.player.invulnerableTime > 0) {
+      this.player.invulnerableTime -= delta;
+    }
 
     this.player.update(delta);
 
     if (this.player.integrity <= 0) {
-      this.state = "GameOver";
+      this.state = GAME_STATES.GAME_OVER;
       this.stats = {
         time: Math.max(this.stats.time, this.player.stats.time),
         maxMass: Math.max(this.stats.maxMass, this.player.stats.maxMass),
@@ -330,20 +430,26 @@ export class Game {
         kills: Math.max(this.stats.kills, this.player.stats.kills),
       };
       saveToStorage("best", this.stats);
-      this.lastGameOver = { ...this.player.stats, level: this.player.level };
+      const reason = this.player.deathReason || "Hull integrity depleted";
+      this.lastGameOver = { ...this.player.stats, level: this.player.level, reason };
       this.audio.play("death");
     }
+    this.debugInfo.nearestEdible = nearestEdibleLabel;
+    this.debugInfo.blockReason = nearestBlockReason;
   }
 
   setMovementVector(vector) {
+    if (this.state !== GAME_STATES.PLAYING) return;
     this.movement.set(vector.x, vector.y);
   }
 
   setPointer(pointer) {
+    if (this.state !== GAME_STATES.PLAYING) return;
     this.pointer.set(pointer.x, pointer.y);
   }
 
   setInput(key, pressed) {
+    if (this.state !== GAME_STATES.PLAYING) return;
     this.inputs[key] = pressed;
   }
 
@@ -355,7 +461,7 @@ export class Game {
       this.player.applyUpgrade(upgrade);
     }
     this.pendingUpgrades = null;
-    this.state = "Playing";
+    this.state = GAME_STATES.PLAYING;
   }
 
   updateSetting(key, value) {
@@ -375,9 +481,13 @@ export class Game {
 
   update() {
     if (!this.running) return;
-    const delta = Math.min(this.clock.getDelta(), 0.04);
-    if (this.state === "Playing") {
-      this.updateGameplay(delta);
+    const delta = Math.min(this.clock.getDelta(), MAX_DT);
+    if (this.state === GAME_STATES.PLAYING) {
+      this.accumulator += delta;
+      while (this.accumulator >= FIXED_STEP) {
+        this.updateGameplay(FIXED_STEP);
+        this.accumulator -= FIXED_STEP;
+      }
     }
     this.updateCamera(delta);
     this.effects.update(delta);
@@ -390,6 +500,9 @@ export class Game {
     if (this.running) return;
     this.running = true;
     this.clock.start();
+    if (this.state === GAME_STATES.BOOT) {
+      this.state = GAME_STATES.MENU;
+    }
     this.update();
   }
 
@@ -422,6 +535,7 @@ export class Game {
         shield: this.player.shield,
         maxShield: this.player.maxShield,
         integrity: this.player.integrity,
+        invulnerableTime: this.player.invulnerableTime,
       },
       abilities: Object.values(this.player.abilities).map((ability) => ({
         name: ability.name,
@@ -440,6 +554,7 @@ export class Game {
       stats: { ...this.stats },
       pendingUpgrades: this.pendingUpgrades,
       gameOver: this.lastGameOver,
+      debug: { ...this.debugInfo },
     };
   }
 

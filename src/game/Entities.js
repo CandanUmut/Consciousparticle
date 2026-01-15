@@ -80,7 +80,9 @@ export const spawnEntity = (type, bounds) => {
     hunter: randRange(2, 3.5),
   };
   const radius = sizes[type] ?? 2;
-  const mass = radius * radius * (type === ENTITY_TYPES.STAR ? 35 : type === ENTITY_TYPES.BLACK_HOLE ? 45 : 8);
+  const densityFactor = type === ENTITY_TYPES.STAR ? 35 : type === ENTITY_TYPES.BLACK_HOLE ? 45 : 8;
+  const mass = radius * radius * densityFactor;
+  const density = mass / Math.pow(radius, 3);
   const mesh = createEntityMesh(type, radius);
   mesh.position.copy(position);
   return {
@@ -90,6 +92,7 @@ export const spawnEntity = (type, bounds) => {
     velocity,
     radius,
     mass,
+    density,
     mesh,
     hp: type === ENTITY_TYPES.HUNTER ? 20 : 1,
     tags: [randChoice(["rift", "core", "halo"])],
