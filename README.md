@@ -63,12 +63,13 @@ npm run dev
 
 1. Ensure `vite.config.js` has `base: "/Consciousparticle/"` (replace with your repo name if forked).
 2. Commit and push to `main`.
-3. GitHub Actions will build and deploy automatically to Pages.
+3. In **Settings → Pages**, set **Source** to **GitHub Actions**.
+4. GitHub Actions will build and deploy automatically to Pages.
 
 Manual build:
 
 ```bash
-npm run build
+npm run build # generates dist/
 ```
 
 Preview locally:
